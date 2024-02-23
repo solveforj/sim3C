@@ -609,33 +609,43 @@ class SeqRead(object):
             # straight to a result if no indels, where here seq_ref
             # has already been chopped to the read length.
             self.seq_read = self.seq_ref
+            error = self.seq_ref.decode()
         else:
             # otherwise, we have a little more work to do.
             self.seq_read = bytearray(self.read_len)
-
+            error = []
             n = 0
             k = 0
             i = 0
             while i < len(self.seq_ref):
                 if k not in self.indel:
                     self.seq_read[n] = self.seq_ref[i]
+                    error.append(self.seq_ref[i])
                     n += 1
                     i += 1
                     k += 1
                 elif self.indel[k] == SeqRead.DELETION:
                     # deletion
+                    error.append(68)
                     i += 1
                     k += 1
                 else:
                     # insertion
                     self.seq_read[n] = self.indel[k]
+                    error.append(73)
+                    error.append(self.indel[k])
                     n += 1
                     k += 1
 
             while k in self.indel:
                 self.seq_read[n] = self.indel[k]
+                error.append(73)
+                error.append(self.indel[k])
                 n += 1
                 k += 1
+
+            error = bytearray(error).decode()
+        return error
 
 
 class Art(object):
@@ -725,8 +735,10 @@ class Art(object):
         :param template: the target template to sequencing fwd/rev
         :return: a dict {'fwd': SeqRead, 'rev': SeqRead}
         """
-        return {'fwd': self.next_read_indel_seq(template, True),
-                'rev': self.next_read_indel_seq(template, False)}
+        fwd_read, fwd_error = self.next_read_indel_seq(template, True)
+        rev_read, rev_error = self.next_read_indel_seq(template, False)
+        return {'fwd': fwd_read,                
+                'rev': rev_read}, fwd_error, rev_error
 
     def next_read_indel_seq(self, template: bytes, plus_strand: bool):
         """
@@ -743,14 +755,14 @@ class Art(object):
                        plus_strand=plus_strand)
 
         read.prepare_donor(simulate_indels=True)
-        read.transfer_sequence()
+        error = read.transfer_sequence()
         # simulated quality scores from profiles
         read.quals = self.emp_dist.get_read_qual(read.read_len, read.is_plus_strand)
         # the returned quality scores can spawn sequencing errors
         # parse_error_numba(read.quals, read.seq_read, EmpDist.PROB_ERR, ord(EmpDist.N_SYMB))
         pcg_parse_error(read.quals, read.seq_read, EmpDist.PROB_ERR, ord(EmpDist.N_SYMB))
 
-        return read
+        return read, error
 
 
 # @njit(int8(int8))

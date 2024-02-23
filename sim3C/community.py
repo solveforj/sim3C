@@ -778,6 +778,7 @@ class Community(object):
             cell = community._register_cell(Cell(c_name, c_details['abundance'], trans_rate))
 
             for r_name, r_details in c_details['replicons'].items():
+
                 repl = Replicon(r_name, cell, r_details['copy_number'], anti_rate, linear)
 
                 for s_name in r_details['segments']:

@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import logging
 import re
+import os
 
 import tqdm
 
@@ -195,13 +196,21 @@ class ReadGenerator(object):
         :return: a read-pair dict
         """
         frag = segment.subseq(pos1, ins_len, is_fwd)
-        pair = self.next_pair(bytes(frag.seq))
+        pair, fwd_error, rev_error = self.next_pair(bytes(frag.seq))
+
+        error_info = {"pos1" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + "+" if is_fwd else "-",
+                      "error1" : fwd_error,
+                      "pos2" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + "-" if is_fwd else "+",
+                      "error2" : rev_error,
+                      "mode" : "WGS"
+                     }
+        
         pair['mode'] = 'WGS'
         pair['desc'] = self.wgs_desc_fmt.format(segment=segment,
                                                 pos1=pos1,
                                                 pos2=pos1 + ins_len,
                                                 dir='F' if is_fwd else 'R')
-        return pair
+        return pair, error_info
 
     def make_ligation_readpair(self, segment1, pos1, enzyme1, segment2, pos2, enzyme2, ins_len, ins_junc):
         """
@@ -218,12 +227,26 @@ class ReadGenerator(object):
         :param ins_junc: junction point on insert
         :return: a read-pair dict
         """
+        a_pos1 = pos1-ins_junc
+        a_pos2 = a_pos1 + ins_junc
         part_a = segment1.subseq(pos1 - ins_junc, ins_junc)
+
+        b_pos1 = pos2
+        b_pos2 = b_pos1 + ins_len - ins_junc
         part_b = segment2.subseq(pos2, ins_len - ins_junc)
-        pair = self.next_pair(bytes(self._part_joiner(part_a, part_b, enzyme1, enzyme2).seq))
+        
+        pair, fwd_error, rev_error = self.next_pair(bytes(self._part_joiner(part_a, part_b, enzyme1, enzyme2).seq))
+
+        error_info = {"pos1" : segment1.name + ":" + str(a_pos1) + "-" + str(a_pos2)+ "_" + "+",
+                      "error1" : fwd_error,
+                      "pos2" : segment2.name + ":" + str(b_pos1) + "-" + str(b_pos2)+ "_" + "-",
+                      "error2" : rev_error,
+                      "mode" : "HIC"
+                     }
+        
         pair['mode'] = '3C'
         pair['desc'] = self._3c_desc_fmt.format(segment1=segment1, pos1=pos1, segment2=segment2, pos2=pos2)
-        return pair
+        return pair, error_info
 
     def write_readpair_biopython(self, h_out, pair, index, fmt='fastq'):
         """
@@ -257,6 +280,18 @@ class ReadGenerator(object):
                                               desc=pair['desc'])
         # write to interleaved file
         writer.write(read1, read2)
+
+    def write_error(self, r1o, r2o, error_info, n):
+        
+        header = "@" + self.seq_id_fmt.format(mode=error_info['mode'], idx=n, r1r2=1) + "\n"
+        
+        r1o.write(header)
+        r1o.write(error_info["pos1"] + "\n")
+        r1o.write(error_info["error1"] + "\n")
+        
+        r2o.write(header)
+        r2o.write(error_info["pos2"] + "\n")
+        r2o.write(error_info["error2"] + "\n")
 
 
 class SequencingStrategy(object):
@@ -472,62 +507,70 @@ class SequencingStrategy(object):
         n_wgs = 0
         n_3c = 0
 
-        for n in tqdm.tqdm(range(1, self.number_pairs+1)):
-
-            ins_len, midpoint, is_fwd = read_gen.draw_insert()
-
-            # is HIC pair?
-            if random.pcg_random.uniform() <= efficiency:
-
-                n_3c += 1
-
-                # draw the first replicon and site
-                seg1, (pos1, enz1) = comm.draw_any_by_site()
-
-                # is it spurious ligation
-                if comm.is_spurious():
-
-                    # draw any segment and position
-                    seg2, (pos2, enz2) = comm.draw_any_by_site()
-
-                # is it an inter-replicon (trans) ligation
-                elif seg1.parent_repl.parent_cell.is_trans():
-
-                    # draw another segment from any other replicon in the cell
-                    seg2 = seg1.parent_repl.parent_cell.draw_other_segment_by_sites(seg1.parent_repl)
-                    pos2, enz2 = seg2.draw_any_site()
-
-                # otherwise an intra-replicon (cis) ligation
-                else:
-
-                    # draw another segment from the same replicon
-                    seg2 = seg1.parent_repl.draw_any_segment_by_sites()
-                    if seg2 == seg1:
-                        # must follow defined distribution of Hi-C pair separation
-                        pos2, enz2 = seg1.draw_constrained_site(pos1)
-                    else:
-                        # unconstrained, any site on seg2
+        dir = os.path.dirname(self.profile_filename)
+        r1_error_out = os.path.join(dir, "sim_R1_error.fq")
+        r2_error_out = os.path.join(dir, "sim_R2_error.fq")
+        
+        with open(r1_error_out, "w") as r1o, open(r2_error_out, 'w') as r2o:
+        
+            for n in tqdm.tqdm(range(1, self.number_pairs+1)):
+    
+                ins_len, midpoint, is_fwd = read_gen.draw_insert()
+    
+                # is HIC pair?
+                if random.pcg_random.uniform() <= efficiency:
+    
+                    n_3c += 1
+    
+                    # draw the first replicon and site
+                    seg1, (pos1, enz1) = comm.draw_any_by_site()
+    
+                    # is it spurious ligation
+                    if comm.is_spurious():
+    
+                        # draw any segment and position
+                        seg2, (pos2, enz2) = comm.draw_any_by_site()
+    
+                    # is it an inter-replicon (trans) ligation
+                    elif seg1.parent_repl.parent_cell.is_trans():
+    
+                        # draw another segment from any other replicon in the cell
+                        seg2 = seg1.parent_repl.parent_cell.draw_other_segment_by_sites(seg1.parent_repl)
                         pos2, enz2 = seg2.draw_any_site()
-
-                # randomly permute source/destination
-                if random.pcg_random.integer(2) == 0:
-                    pos1, pos2 = pos2, pos1
-                    seg1, seg2 = seg2, seg1
-                    enz1, enz2 = enz2, enz1
-
-                # with coordinates, make hic read-pair
-                pair = read_gen.make_ligation_readpair(seg1, pos1, enz1, seg2, pos2, enz2, ins_len, midpoint)
-
-            # otherwise WGS
-            else:
-
-                # TODO this process will always draw WGS pairs on the same segment
-                #   whereas WGS pairs are capable of spanning segments
-                n_wgs += 1
-                seg1, pos1 = comm.draw_any_by_extent()
-                pair = read_gen.make_wgs_readpair(seg1, pos1, ins_len, is_fwd)
-
-            read_gen.write_readpair_dnaio(ostream, pair, n)
+    
+                    # otherwise an intra-replicon (cis) ligation
+                    else:
+    
+                        # draw another segment from the same replicon
+                        seg2 = seg1.parent_repl.draw_any_segment_by_sites()
+                        if seg2 == seg1:
+                            # must follow defined distribution of Hi-C pair separation
+                            pos2, enz2 = seg1.draw_constrained_site(pos1)
+                        else:
+                            # unconstrained, any site on seg2
+                            pos2, enz2 = seg2.draw_any_site()
+    
+                    # randomly permute source/destination
+                    if random.pcg_random.integer(2) == 0:
+                        pos1, pos2 = pos2, pos1
+                        seg1, seg2 = seg2, seg1
+                        enz1, enz2 = enz2, enz1
+    
+                    # with coordinates, make hic read-pair
+                    pair, error_info = read_gen.make_ligation_readpair(seg1, pos1, enz1, seg2, pos2, enz2, ins_len, midpoint)
+    
+                # otherwise WGS
+                else:
+    
+                    # TODO this process will always draw WGS pairs on the same segment
+                    #   whereas WGS pairs are capable of spanning segments
+                    n_wgs += 1
+                    seg1, pos1 = comm.draw_any_by_extent()
+                    pair, error_info = read_gen.make_wgs_readpair(seg1, pos1, ins_len, is_fwd)
+                    
+                
+                read_gen.write_readpair_dnaio(ostream, pair, n)
+                read_gen.write_error(r1o, r2o, error_info, n)
 
         assert self.number_pairs - n_wgs == n_3c, 'Error: WGS and 3C pairs did not sum to ' \
                                                   '{} was did not add'.format(self.number_pairs)
