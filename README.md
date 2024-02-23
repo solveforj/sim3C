@@ -41,7 +41,7 @@ To install and run sim3C you will require Python >=3.11, C-compiler, Make, and L
 The sim3C executable can be installed for an individual user directly from Github using Pip as follows.
 
 ```bash
-pip install --user git+https://github.com/cerebis/sim3C
+pip install --user git+https://github.com/solveforj/sim3C
 ```
 
 Python dependencies will automatically be satisfied during installation. 
