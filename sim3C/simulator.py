@@ -198,9 +198,11 @@ class ReadGenerator(object):
         frag = segment.subseq(pos1, ins_len, is_fwd)
         pair, fwd_error, rev_error = self.next_pair(bytes(frag.seq))
 
-        error_info = {"pos1" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + "+" if is_fwd else "-",
+        pos1_strand = "+" if is_fwd else "-"
+        pos2_strand = "-" if is_fwd else "+"
+        error_info = {"pos1" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + pos1_strand,
                       "error1" : fwd_error,
-                      "pos2" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + "-" if is_fwd else "+",
+                      "pos2" : segment.name + ":" + str(pos1) + "-" + str(pos1 + ins_len)+ "_" + pos2_strand,
                       "error2" : rev_error,
                       "mode" : "WGS"
                      }
