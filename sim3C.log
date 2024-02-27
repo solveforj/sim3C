@@ -1,0 +1,18 @@
+DEBUG    | 2024-02-23 03:05:03,214 |    main | {'sim3C_version': '0.7.1', 'run_timestamp': '2024-02-23 03:05:03.213951'}
+DEBUG    | 2024-02-23 03:05:03,214 |    main | 3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:53:32) [GCC 12.3.0]
+DEBUG    | 2024-02-23 03:05:03,214 | sim3C.random | Random state initialized with seed: 1708686303
+ERROR    | 2024-02-23 03:06:12,116 |    main | [Errno 2] No such file or directory: 'profile.txt'
+Traceback (most recent call last):
+  File "/u/project/cluo/jgalasso/miniconda3/envs/sim3C/lib/python3.11/site-packages/sim3C/command_line.py", line 252, in main
+    strategy = SequencingStrategy(args.profile_in, args.genome_seq, args.enzyme,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/project/cluo/jgalasso/miniconda3/envs/sim3C/lib/python3.11/site-packages/sim3C/simulator.py", line 382, in __init__
+    self.community = Community.from_profile(seq_index, profile_filename, self.enzymes,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/project/cluo/jgalasso/miniconda3/envs/sim3C/lib/python3.11/site-packages/sim3C/community.py", line 774, in from_profile
+    comm_dict = read_profile(profile_table, True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/project/cluo/jgalasso/miniconda3/envs/sim3C/lib/python3.11/site-packages/sim3C/abundance.py", line 265, in read_profile
+    with open(filename, 'rt') as input_h:
+         ^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'profile.txt'

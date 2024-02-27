@@ -437,59 +437,65 @@ class SequencingStrategy(object):
         n_wgs = 0
         n_3c = 0
 
-        for n in tqdm.tqdm(range(1, self.number_pairs+1)):
-
-            # pick an replicon, position and insert size
-            seg1, pos1 = comm.draw_any_by_extent()
-            ins_len, midpoint, is_fwd = read_gen.draw_insert()
-
-            if random.pcg_random.uniform() < efficiency and seg1.covers_site(pos1, midpoint):
-
-                n_3c += 1
-
-                # move pos1 to the nearest actual site
-                pos1, enz1 = seg1.sites.find_nn(pos1)
-
-                # is it spurious ligation
-                if comm.is_spurious():
-
-                    seg2, (pos2, enz2) = comm.draw_any_by_site()
-
-                # is it an inter-replicon (trans) ligation
-                elif seg1.parent_repl.parent_cell.is_trans():
-
-                    seg2 = seg1.parent_repl.parent_cell.draw_other_segment_by_sites(seg1.parent_repl)
-                    pos2, enz2 = seg2.draw_any_site()
-
-                # otherwise an intra-replicon (cis) ligation
-                else:
-
-                    seg2 = seg1.parent_repl.draw_any_segment_by_sites()
-                    if seg2 == seg1:
-                        # find the first intervening site between
-                        # random constrained position pos2 and site pos1.
-                        pos2, enz2 = seg1.draw_constrained_site(pos1)
-                        pos2, enz2 = seg1.sites.find_first(pos2, pos1)
-                    else:
-                        # unconstrained, any site on seg2
+        dir = os.path.dirname(self.profile_filename)
+        r1_error_out = os.path.join(dir, "sim_R1_error.fq")
+        r2_error_out = os.path.join(dir, "sim_R2_error.fq")
+        
+        with open(r1_error_out, "w") as r1o, open(r2_error_out, 'w') as r2o:
+            for n in tqdm.tqdm(range(1, self.number_pairs+1)):
+    
+                # pick an replicon, position and insert size
+                seg1, pos1 = comm.draw_any_by_extent()
+                ins_len, midpoint, is_fwd = read_gen.draw_insert()
+    
+                if random.pcg_random.uniform() < efficiency and seg1.covers_site(pos1, midpoint):
+    
+                    n_3c += 1
+    
+                    # move pos1 to the nearest actual site
+                    pos1, enz1 = seg1.sites.find_nn(pos1)
+    
+                    # is it spurious ligation
+                    if comm.is_spurious():
+    
+                        seg2, (pos2, enz2) = comm.draw_any_by_site()
+    
+                    # is it an inter-replicon (trans) ligation
+                    elif seg1.parent_repl.parent_cell.is_trans():
+    
+                        seg2 = seg1.parent_repl.parent_cell.draw_other_segment_by_sites(seg1.parent_repl)
                         pos2, enz2 = seg2.draw_any_site()
-
-                # randomly permute source/destination
-                if random.pcg_random.integer(2) == 0:
-                    pos1, pos2 = pos2, pos1
-                    seg1, seg2 = seg2, seg1
-                    enz1, enz2 = enz2, enz1
-
-                pair = read_gen.make_ligation_readpair(seg1, pos1, enz1, seg2, pos2, enz2, ins_len, midpoint)
-
-            # otherwise WGS
-            else:
-
-                n_wgs += 1
-                # take the already drawn coordinates
-                pair = read_gen.make_wgs_readpair(seg1, pos1, ins_len, is_fwd)
-
-            read_gen.write_readpair_dnaio(ostream, pair, n)
+    
+                    # otherwise an intra-replicon (cis) ligation
+                    else:
+    
+                        seg2 = seg1.parent_repl.draw_any_segment_by_sites()
+                        if seg2 == seg1:
+                            # find the first intervening site between
+                            # random constrained position pos2 and site pos1.
+                            pos2, enz2 = seg1.draw_constrained_site(pos1)
+                            pos2, enz2 = seg1.sites.find_first(pos2, pos1)
+                        else:
+                            # unconstrained, any site on seg2
+                            pos2, enz2 = seg2.draw_any_site()
+    
+                    # randomly permute source/destination
+                    if random.pcg_random.integer(2) == 0:
+                        pos1, pos2 = pos2, pos1
+                        seg1, seg2 = seg2, seg1
+                        enz1, enz2 = enz2, enz1
+    
+                    pair, error_info = read_gen.make_ligation_readpair(seg1, pos1, enz1, seg2, pos2, enz2, ins_len, midpoint)
+    
+                # otherwise WGS
+                else:
+    
+                    n_wgs += 1
+                    # take the already drawn coordinates
+                    pair, error_info = read_gen.make_wgs_readpair(seg1, pos1, ins_len, is_fwd)
+    
+                read_gen.write_readpair_dnaio(ostream, pair, n)
+                read_gen.write_error(r1o, r2o, error_info, n)
 
         assert self.number_pairs - n_wgs == n_3c, 'Error: WGS and 3C pairs did not sum to ' \
                                                   '{} was did not add'.format(self.number_pairs)
